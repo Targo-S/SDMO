@@ -1,0 +1,6 @@
+[project]
+name = "sdmo-device-gateway-cloud"
+version = "0.1.0"
+description = "A simulated legacy device, edge gateway, and cloud service"
+requires-python = ">=3.11"
+dependencies = []

@@ -1,0 +1,43 @@
+services:
+  legacy-device:
+    build: .
+    command: ["python", "-m", "sdmo.legacy_device"]
+    environment:
+      DEVICE_ID: legacy-sensor-01
+      DEVICE_PORT: "8082"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  cloud:
+    build: .
+    command: ["python", "-m", "sdmo.cloud"]
+    environment:
+      CLOUD_PORT: "8081"
+      SHARED_KEY: ${SHARED_KEY:-demo-only-change-me}
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  gateway:
+    build: .
+    command: ["python", "-m", "sdmo.gateway"]
+    environment:
+      DEVICE_URL: http://legacy-device:8082/v1/reading
+      CLOUD_URL: http://cloud:8081/v1/readings
+      GATEWAY_PORT: "8080"
+      POLL_SECONDS: "5"
+      SHARED_KEY: ${SHARED_KEY:-demo-only-change-me}
+    ports:
+      - "8080:8080"
+    depends_on:
+      legacy-device:
+        condition: service_healthy
+      cloud:
+        condition: service_healthy
