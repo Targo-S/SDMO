@@ -1,0 +1,35 @@
+groups:
+  - name: ml-kem
+    rules:
+      - alert: LegacyKeyStillInUse
+        expr: increase(cloud_legacy_requests_total[15m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: Static-key requests are still reaching the cloud; finish the migration or retire /v1.
+      - alert: GatewayFellBackToStaticKey
+        expr: increase(gateway_fallback_total[15m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: A gateway used the static key because the cloud offered no v2 handshake.
+      - alert: HighHandshakeFailureRatio
+        expr: sum(rate(cloud_handshakes_total{result="failed"}[5m])) / sum(rate(cloud_handshakes_total[5m])) > 0.2
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: More than 20% of ML-KEM handshakes are failing.
+      - alert: RecordAuthenticationFailures
+        expr: increase(cloud_records_rejected_total{reason=~"aead_fail|replay"}[5m]) > 5
+        labels: {severity: critical}
+        annotations:
+          summary: Records are failing AEAD or replay checks; possible tampering or key desynchronisation.
+      - alert: CryptoSelfTestFailed
+        expr: crypto_selftest_ok == 0
+        labels: {severity: critical}
+        annotations:
+          summary: The ML-KEM startup self-test failed.
+      - alert: SessionTableNearCapacity
+        expr: cloud_sessions_active > 800
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: The cloud session table is above 80% of its default capacity.
