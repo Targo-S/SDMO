@@ -68,47 +68,27 @@ class CloudValidationTests(unittest.TestCase):
         # Size is checked before reading, so a short body with a large header is enough.
         self.assert_raw_rejected(b"{}", {"Content-Length": "70000"})
 
-    # Field types and values
-    def test_rejects_string_temperature(self):
-        self.assert_rejected(valid_reading(temperature_c="EXTREME_HEAT"))
-
-    def test_rejects_nan_temperature(self):
-        self.assert_rejected(valid_reading(temperature_c=float("nan")))
-
-    def test_rejects_infinite_temperature(self):
-        self.assert_rejected(valid_reading(temperature_c=float("inf")))
-
-    def test_rejects_boolean_temperature(self):
-        self.assert_rejected(valid_reading(temperature_c=True))
-
-    def test_rejects_physically_implausible_temperature(self):
-        # Design decision: accepted range is -60..100 C.
-        self.assert_rejected(valid_reading(temperature_c=9999))
-
-    def test_rejects_boolean_sequence(self):
-        self.assert_rejected(valid_reading(sequence=True))
-
-    def test_rejects_string_sequence(self):
-        self.assert_rejected(valid_reading(sequence="1"))
-
-    def test_rejects_negative_sequence(self):
-        self.assert_rejected(valid_reading(sequence=-1))
-
-    def test_rejects_empty_device_id(self):
-        self.assert_rejected(valid_reading(device_id=""))
-
-    def test_rejects_non_string_device_id(self):
-        self.assert_rejected(valid_reading(device_id=123))
-
-    def test_rejects_oversized_device_id(self):
-        # Design decision: device_id is at most 64 characters.
-        self.assert_rejected(valid_reading(device_id="x" * 1000))
-
-    def test_rejects_unparseable_timestamp(self):
-        self.assert_rejected(valid_reading(observed_at="yesterday"))
-
-    def test_rejects_timestamp_without_timezone(self):
-        self.assert_rejected(valid_reading(observed_at="2026-10-06T12:00:00"))
+    def test_rejects_invalid_field_values(self):
+        cases = {
+            "string temperature": {"temperature_c": "EXTREME_HEAT"},
+            "NaN temperature": {"temperature_c": float("nan")},
+            "infinite temperature": {"temperature_c": float("inf")},
+            "boolean temperature": {"temperature_c": True},
+            # Design decision: accepted range is -60..100 C.
+            "implausible temperature": {"temperature_c": 9999},
+            "boolean sequence": {"sequence": True},
+            "string sequence": {"sequence": "1"},
+            "negative sequence": {"sequence": -1},
+            "empty device_id": {"device_id": ""},
+            "non-string device_id": {"device_id": 123},
+            # Design decision: device_id is at most 64 characters.
+            "oversized device_id": {"device_id": "x" * 1000},
+            "unparseable timestamp": {"observed_at": "yesterday"},
+            "timestamp without timezone": {"observed_at": "2026-10-06T12:00:00"},
+        }
+        for name, override in cases.items():
+            with self.subTest(case=name):
+                self.assert_rejected(valid_reading(**override))
 
 
 class CloudAuthTests(unittest.TestCase):

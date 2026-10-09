@@ -4,13 +4,20 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from sdmo.common import send_json
 
 
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_opener = build_opener(NoRedirect)
+
 def poll_once(device_url, cloud_url, shared_key):
-    with urlopen(device_url, timeout=5) as response:
+    with _opener.open(device_url, timeout=5) as response:
         reading = json.load(response)
     request = Request(
         cloud_url,
@@ -18,7 +25,7 @@ def poll_once(device_url, cloud_url, shared_key):
         headers={"Content-Type": "application/json", "X-Legacy-Shared-Key": shared_key},
         method="POST",
     )
-    with urlopen(request, timeout=5) as response:
+    with _opener.open(request, timeout=5) as response:
         if response.status != 202:
             raise URLError(f"cloud returned HTTP {response.status}")
     return reading
