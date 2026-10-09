@@ -1,0 +1,67 @@
+name: Deploy Test
+
+# Deploys the image published by the "Docker" workflow to a test environment
+# and verifies /healthz. Runs only after a successful publish on main (push
+# event), or manually via workflow_dispatch.
+on:
+  workflow_run:
+    workflows: [ "Docker" ]
+    types: [ completed ]
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag in GHCR to deploy (e.g. main or 0.1.0)"
+        default: "main"
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment: test
+    defaults:
+      run:
+        working-directory: SDMO
+    env:
+      IMAGE_TAG: ${{ inputs.image_tag || 'main' }}
+      SHARED_KEY: ${{ secrets.SDMO_SHARED_KEY || 'demo-only-change-me' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Select image
+        run: echo "SDMO_IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}:${IMAGE_TAG}" >> "$GITHUB_ENV"
+
+      - name: Deploy test stack
+        run: docker compose -f compose.yaml -f compose.test.yaml up -d --wait --wait-timeout 120
+
+      - name: Verify health endpoints
+        run: ./scripts/check_health.sh localhost 60
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f compose.yaml -f compose.test.yaml logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f compose.yaml -f compose.test.yaml down -v
