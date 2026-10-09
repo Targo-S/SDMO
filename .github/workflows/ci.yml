@@ -28,6 +28,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install dependencies
+        run: pip install -e .
+
       - name: Compile check
         run: python -m compileall -q sdmo tests
 
