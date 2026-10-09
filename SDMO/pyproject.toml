@@ -7,3 +7,6 @@ dependencies = ["cryptography>=50.0.2,<51", "prometheus-client>=0.26,<1"]
 
 [project.optional-dependencies]
 test = ["kyber-py>=1.2"]
+
+[tool.setuptools]
+packages = ["sdmo"]
