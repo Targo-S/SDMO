@@ -1,10 +1,24 @@
 services:
+  provision:
+    build: .
+    command: ["python", "-m", "sdmo.provision", "/secrets", "gateway-01"]
+    volumes:
+      - secrets:/secrets
+    restart: "no"
+
   legacy-device:
     build: .
     command: ["python", "-m", "sdmo.legacy_device"]
     environment:
       DEVICE_ID: legacy-sensor-01
       DEVICE_PORT: "8082"
+      DEVICE_MASTER_FILE: /secrets/device_master.secret
+    volumes:
+      - secrets:/secrets:ro
+    networks: [device-net]
+    depends_on:
+      provision:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/healthz')"]
       interval: 10s
@@ -16,9 +30,18 @@ services:
     command: ["python", "-m", "sdmo.cloud"]
     environment:
       CLOUD_PORT: "8081"
-      SHARED_KEY: ${SHARED_KEY:-demo-only-change-me}
+      ACCEPT_MODES: hybrid
+      KEM_SUITES: X25519+ML-KEM-768
+      CLOUD_IDENTITY_KEY_FILE: /secrets/cloud_identity.key
+      GATEWAY_REGISTRY_FILE: /secrets/registry.json
+    volumes:
+      - secrets:/secrets:ro
     ports:
       - "8081:8081"
+    networks: [cloud-net]
+    depends_on:
+      provision:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/healthz')"]
       interval: 10s
@@ -33,11 +56,42 @@ services:
       CLOUD_URL: http://cloud:8081/v1/readings
       GATEWAY_PORT: "8080"
       POLL_SECONDS: "5"
-      SHARED_KEY: ${SHARED_KEY:-demo-only-change-me}
+      PREFERRED_MODE: hybrid
+      ALLOW_LEGACY_FALLBACK: "false"
+      KEM_SUITES: X25519+ML-KEM-768
+      GATEWAY_ID: gateway-01
+      ENROLLMENT_SECRET_FILE: /secrets/gateway-01.secret
+      CLOUD_IDENTITY_PUB_FILE: /secrets/cloud_identity.pub
+      DEVICE_MASTER_FILE: /secrets/device_master.secret
+      RATCHET_FILE: /state/ratchet.json
+    volumes:
+      - secrets:/secrets:ro
+      - gateway-state:/state
     ports:
       - "8080:8080"
+    networks: [device-net, cloud-net]
     depends_on:
+      provision:
+        condition: service_completed_successfully
       legacy-device:
         condition: service_healthy
       cloud:
         condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: [monitoring]
+    volumes:
+      - ./monitoring:/etc/prometheus:ro
+    ports:
+      - "9090:9090"
+    networks: [cloud-net]
+    depends_on: [gateway]
+
+networks:
+  device-net:
+  cloud-net:
+
+volumes:
+  secrets:
+  gateway-state:

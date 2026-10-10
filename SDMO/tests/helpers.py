@@ -13,7 +13,9 @@ import sys
 import threading
 from contextlib import contextmanager, redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.error import HTTPError
 from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 
 KEY = "test-key"
 SHOW_LOGS = os.environ.get("SDMO_TEST_LOGS") == "1"
@@ -54,7 +56,7 @@ class ServerHandlerError(AssertionError):
 def running_server(handler):
     """Run `handler` on a free localhost port; yields the base URL."""
     server = TestServer(("127.0.0.1", 0), handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
     thread.start()
     try:
         yield f"http://127.0.0.1:{server.server_port}"
@@ -135,3 +137,35 @@ def unused_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
+
+
+def post_raw(url, body, headers=None):
+    """POST raw bytes (or a JSON-serializable object) and return (status, parsed body or raw bytes)."""
+    data = body if isinstance(body, bytes) else json.dumps(body).encode()
+    request = Request(url, data=data, headers=headers or {}, method="POST")
+    try:
+        with urlopen(request, timeout=5) as response:
+            status, raw = response.status, response.read()
+    except HTTPError as error:
+        status, raw = error.code, error.read()
+        error.close()
+    try:
+        return status, json.loads(raw)
+    except ValueError:
+        return status, raw
+
+
+def get_text(url):
+    with urlopen(url, timeout=5) as response:
+        return response.read().decode()
+
+
+class FakeClock:
+    def __init__(self, now=1_800_000_000.0):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds

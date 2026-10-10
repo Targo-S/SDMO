@@ -1,0 +1,15 @@
+# Test-environment override: run the published GHCR image instead of building.
+# Usage: SDMO_IMAGE=ghcr.io/<owner>/<repo>:main docker compose -f compose.yaml -f compose.test.yaml up -d
+services:
+  legacy-device:
+    image: ${SDMO_IMAGE:?set SDMO_IMAGE}
+    pull_policy: always
+    build: !reset null
+  cloud:
+    image: ${SDMO_IMAGE:?set SDMO_IMAGE}
+    pull_policy: always
+    build: !reset null
+  gateway:
+    image: ${SDMO_IMAGE:?set SDMO_IMAGE}
+    pull_policy: always
+    build: !reset null

@@ -1,26 +1,12 @@
 import json
-import threading
 import unittest
-from contextlib import contextmanager
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from sdmo.cloud import CloudState, make_handler
 from sdmo.gateway import poll_once
-
-
-@contextmanager
-def running_server(handler):
-    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{server.server_port}"
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=2)
+from tests.helpers import running_server
 
 
 class PipelineTests(unittest.TestCase):

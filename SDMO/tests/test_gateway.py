@@ -1,12 +1,11 @@
 """Gateway: forwarding behaviour, error handling and its own endpoints."""
 import json
-import threading
 import unittest
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from sdmo.cloud import CloudState, make_handler as make_cloud_handler
-from sdmo.gateway import make_handler, poll_once
+from sdmo.gateway import GatewayMetrics, make_handler, poll_once
 from tests.helpers import (KEY, running_server, setUpModule, stub_handler,  # noqa: F401
                            tearDownModule, unused_port, valid_reading)
 
@@ -93,14 +92,16 @@ class GatewayErrorTests(unittest.TestCase):
 
 class GatewayEndpointTests(unittest.TestCase):
     def test_healthz_and_metrics(self):
-        metrics = {"forwarded_total": 3, "errors_total": 1}
-        with running_server(make_handler(metrics, threading.Lock())) as gateway:
+        metrics = GatewayMetrics()
+        metrics.forwarded.inc(3)
+        metrics.errors.inc()
+        with running_server(make_handler(metrics.registry)) as gateway:
             with urlopen(f"{gateway}/healthz") as response:
                 self.assertEqual(json.load(response), {"status": "ok"})
             with urlopen(f"{gateway}/metrics") as response:
                 body = response.read().decode()
-        self.assertIn("gateway_forwarded_total 3", body)
-        self.assertIn("gateway_errors_total 1", body)
+        self.assertIn("gateway_forwarded_total 3.0", body)
+        self.assertIn("gateway_errors_total 1.0", body)
 
 
 if __name__ == "__main__":
