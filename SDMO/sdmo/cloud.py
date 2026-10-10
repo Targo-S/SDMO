@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
 from sdmo import crypto
-from sdmo.common import read_json, send_json
+from sdmo.common import discard_body, read_json, send_json
 from sdmo.metrics import register_crypto_metrics, send_metrics
 
 REQUIRED_READING = {"device_id", "sequence", "temperature_c", "observed_at"}
@@ -344,6 +344,7 @@ def make_handler(state):
             elif self.path == "/v2/readings" and state.hybrid_enabled:
                 self._v2(state.record, 202)
             else:
+                discard_body(self)
                 send_json(self, 404, {"error": "not found"})
 
         def _v2(self, operation, success_status):
@@ -362,6 +363,7 @@ def make_handler(state):
         def _legacy_reading(self):
             state.m_legacy.inc()
             if not state.legacy_active():
+                discard_body(self)
                 send_json(self, 410, {"error": "legacy mode retired"})
                 return
             if state.hybrid_enabled:
@@ -369,6 +371,7 @@ def make_handler(state):
             if not key_matches(self.headers.get("X-Legacy-Shared-Key", ""), state.shared_key):
                 with state.lock:
                     state.rejected += 1
+                discard_body(self)
                 send_json(self, 401, {"error": "unauthorized"})
                 return
             try:

@@ -59,14 +59,14 @@ class CloudValidationTests(unittest.TestCase):
         self.assert_raw_rejected(b"", {})
 
     def test_rejects_non_numeric_content_length(self):
-        self.assert_raw_rejected(b"{}", {"Content-Length": "abc"})
+        self.assert_raw_rejected(b"", {"Content-Length": "abc"})
 
     def test_rejects_negative_content_length(self):
-        self.assert_raw_rejected(b"{}", {"Content-Length": "-5"})
+        self.assert_raw_rejected(b"", {"Content-Length": "-5"})
 
     def test_rejects_oversized_body(self):
-        # Size is checked before reading, so a short body with a large header is enough.
-        self.assert_raw_rejected(b"{}", {"Content-Length": "70000"})
+        # The server rejects the header before reading, so no body is sent.
+        self.assert_raw_rejected(b"", {"Content-Length": "70000"})
 
     def test_rejects_invalid_field_values(self):
         cases = {
