@@ -19,7 +19,6 @@ from sdmo import crypto
 from sdmo.common import discard_body, read_json, send_json
 from sdmo.metrics import register_crypto_metrics, send_metrics
 
-REQUIRED_READING = {"device_id", "sequence", "temperature_c", "observed_at"}
 MAX_RECORD_BYTES = 8192
 NONCE_CACHE_SIZE = 4096
 
@@ -44,9 +43,6 @@ class Session:
     records: int = 0
     active: bool = False
 
-
-def _valid_reading(reading):
-    return isinstance(reading, dict) and REQUIRED_READING.issubset(reading)
 
 REQUIRED_FIELDS = {"device_id", "sequence", "temperature_c", "observed_at"}
 MAX_DEVICE_ID_LENGTH = 64
@@ -315,10 +311,9 @@ class CloudState:
             session.records += 1
             try:
                 reading = json.loads(plaintext)
-            except ValueError:
-                reading = None
-            if not _valid_reading(reading):
-                raise ProtocolError(400, "invalid_reading")
+                validate_reading(reading)
+            except (ValueError, TypeError):
+                raise ProtocolError(400, "invalid_reading") from None
             self.readings.append(reading)
             return crypto.ack_tag(session.mac_key, session_id, counter)
 

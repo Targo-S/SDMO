@@ -340,6 +340,14 @@ class AttackTests(HybridTestCase):
         self.assertEqual(post_raw(url, build_record(session, 1))[0], 401)
         self.assertEqual(self.state.readings, [])
 
+    def test_encrypted_reading_gets_the_same_validation_as_legacy(self):
+        self.client.handshake()
+        session = self.client.session
+        url = f"{self.url}/v2/readings"
+        bad = dict(make_reading(), temperature_c=float("nan"))
+        self.assertEqual(post_raw(url, build_record(session, 1, json.dumps(bad).encode()))[0], 400)
+        self.assertEqual(self.state.readings, [])
+
 
 class MalformedInputTests(HybridTestCase):
     def assert_rejected(self, path, body, expected=(400,)):
