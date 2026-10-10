@@ -146,7 +146,8 @@ Cloud:
 
 - `cloud_handshakes_total{mode,suite,result}`
 - `cloud_handshake_failures_total{reason}`: `malformed`, `bad_version`, `unknown_gateway`, `unsupported_suite`, `bad_mac`, `stale_timestamp`, `replay`, `rate_limited`, `capacity`
-- `cloud_records_rejected_total{reason}`: `malformed`, `unknown_session`, `expired`, `replay`, `aead_fail`, `invalid_reading`
+- `cloud_records_rejected_total{reason}`: `malformed`, `unknown_session`, `expired`, `replay`, `aead_fail`, `invalid_reading`, `duplicate_sequence`
+- `cloud_duplicate_readings_total`: duplicate `(device_id, sequence)` pairs rejected across both `/v1` and `/v2`
 - `cloud_legacy_requests_total` (the migration indicator; it should stay at zero once the migration is done)
 - `cloud_sessions_active`, `cloud_session_age_seconds` (expired sessions are excluded)
 - `cloud_handshake_duration_seconds` (histogram)

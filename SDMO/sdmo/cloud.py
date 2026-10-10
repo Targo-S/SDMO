@@ -6,7 +6,7 @@ import threading
 import time
 from collections import OrderedDict, deque
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from cryptography.exceptions import InvalidTag
@@ -21,6 +21,11 @@ from sdmo.metrics import register_crypto_metrics, send_metrics
 REQUIRED_READING = {"device_id", "sequence", "temperature_c", "observed_at"}
 MAX_RECORD_BYTES = 8192
 NONCE_CACHE_SIZE = 4096
+MAX_DEVICE_ID_LEN = 64
+MIN_TEMPERATURE_C = -50.0
+MAX_TEMPERATURE_C = 100.0
+MAX_CLOCK_SKEW_FUTURE = timedelta(minutes=5)
+MAX_CLOCK_SKEW_PAST = timedelta(days=365)
 
 
 class ProtocolError(Exception):
@@ -45,7 +50,38 @@ class Session:
 
 
 def _valid_reading(reading):
-    return isinstance(reading, dict) and REQUIRED_READING.issubset(reading)
+    """Return the validated reading dict, or None if the reading is invalid."""
+    if not isinstance(reading, dict) or not REQUIRED_READING.issubset(reading):
+        return None
+
+    device_id = reading["device_id"]
+    if not isinstance(device_id, str) or not device_id or len(device_id) > MAX_DEVICE_ID_LEN:
+        return None
+
+    sequence = reading["sequence"]
+    if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence <= 0:
+        return None
+
+    temperature = reading["temperature_c"]
+    if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
+        return None
+    if not MIN_TEMPERATURE_C <= temperature <= MAX_TEMPERATURE_C:
+        return None
+
+    observed_at = reading["observed_at"]
+    if not isinstance(observed_at, str):
+        return None
+    try:
+        timestamp = datetime.fromisoformat(observed_at)
+        if timestamp.utcoffset() is None:
+            return None
+        now = datetime.now(timezone.utc)
+        if timestamp > now + MAX_CLOCK_SKEW_FUTURE or timestamp < now - MAX_CLOCK_SKEW_PAST:
+            return None
+    except (OverflowError, ValueError):
+        return None
+
+    return reading
 
 
 class CloudState:
@@ -82,6 +118,7 @@ class CloudState:
 
         self.readings = []
         self.rejected = 0
+        self.seen_sequences = set()
         self.sessions = {}
         self.lock = threading.Lock()
         self._handshake_times = {}
@@ -96,11 +133,14 @@ class CloudState:
                                 registry=self.registry)
         self.m_record_rejects = Counter("cloud_records_rejected", "Rejected v2 records",
                                         ["reason"], registry=self.registry)
+        self.m_duplicates = Counter(
+            "cloud_duplicate_readings", "Duplicate (device_id, sequence) pairs rejected",
+            registry=self.registry)
         self.m_handshake_seconds = Histogram("cloud_handshake_duration_seconds", "Handshake duration",
                                              registry=self.registry)
         Gauge("cloud_received_readings", "Stored readings", registry=self.registry).set_function(
             lambda: len(self.readings))
-        Gauge("cloud_rejected_requests", "Legacy requests rejected for a bad key",
+        Gauge("cloud_rejected_requests", "Rejected legacy requests",
               registry=self.registry).set_function(lambda: self.rejected)
         Gauge("cloud_sessions_active", "Active v2 sessions", registry=self.registry).set_function(
             self._active_sessions)
@@ -288,10 +328,16 @@ class CloudState:
             try:
                 reading = json.loads(plaintext)
             except ValueError:
-                reading = None
-            if not _valid_reading(reading):
+                raise ProtocolError(400, "invalid_reading") from None
+            validated = _valid_reading(reading)
+            if validated is None:
                 raise ProtocolError(400, "invalid_reading")
-            self.readings.append(reading)
+            key = (validated["device_id"], validated["sequence"])
+            if key in self.seen_sequences:
+                self.m_duplicates.inc()
+                raise ProtocolError(409, "duplicate_sequence")
+            self.seen_sequences.add(key)
+            self.readings.append(validated)
             return crypto.ack_tag(session.mac_key, session_id, counter)
 
 
@@ -345,13 +391,30 @@ def make_handler(state):
                 return
             try:
                 reading = read_json(self)
-                if not _valid_reading(reading):
-                    raise ValueError("missing fields")
             except (ValueError, TypeError):
                 send_json(self, 400, {"error": "invalid reading"})
                 return
+
+            validated = _valid_reading(reading)
+            if validated is None:
+                with state.lock:
+                    state.rejected += 1
+                send_json(self, 400, {"error": "invalid reading"})
+                return
+
             with state.lock:
-                state.readings.append(reading)
+                key = (validated["device_id"], validated["sequence"])
+                if key in state.seen_sequences:
+                    state.rejected += 1
+                    state.m_duplicates.inc()
+                    duplicate = True
+                else:
+                    state.seen_sequences.add(key)
+                    state.readings.append(validated)
+                    duplicate = False
+            if duplicate:
+                send_json(self, 409, {"error": "duplicate sequence"})
+                return
             send_json(self, 202, {"accepted": True})
 
         def log_message(self, format, *args):
