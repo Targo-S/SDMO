@@ -1,0 +1,25 @@
+UP017 [*] Use `datetime.UTC` alias
+  --> sdmo\legacy_device.py:23:49
+   |
+21 |                     "sequence": number,
+22 |                     "temperature_c": round(21.5 + ((number % 7) - 3) * 0.2, 1),
+23 |                     "observed_at": datetime.now(timezone.utc).isoformat(),
+   |                                                 ^^^^^^^^^^^^
+24 |                 })
+25 |             else:
+   |
+help: Convert to `datetime.UTC` alias
+   |
+2  | import os
+   - from datetime import datetime, timezone
+3  + from datetime import datetime, timezone, UTC
+4  | from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+--------------------------------------------------------------------------------
+22 |                     "temperature_c": round(21.5 + ((number % 7) - 3) * 0.2, 1),
+   -                     "observed_at": datetime.now(timezone.utc).isoformat(),
+23 +                     "observed_at": datetime.now(UTC).isoformat(),
+24 |                 })
+   |
+
+Found 1 error.
+[*] 1 fixable with the `--fix` option.

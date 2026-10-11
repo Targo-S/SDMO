@@ -65,6 +65,8 @@ def build_record(session, counter, plaintext=None):
 
 class ServerError(BaseHTTPRequestHandler):
     def do_POST(self):
+        # Read the body first: closing a socket with unread data makes Windows abort the connection.
+        self.rfile.read(int(self.headers.get("Content-Length", "0")))
         self.send_response(503)
         self.send_header("Content-Length", "0")
         self.end_headers()
@@ -336,6 +338,14 @@ class AttackTests(HybridTestCase):
         url = f"{self.url}/v2/readings"
         self.assertEqual(post_raw(url, build_record(session, 1, b'{"device_id": "x"}'))[0], 400)
         self.assertEqual(post_raw(url, build_record(session, 1))[0], 401)
+        self.assertEqual(self.state.readings, [])
+
+    def test_encrypted_reading_gets_the_same_validation_as_legacy(self):
+        self.client.handshake()
+        session = self.client.session
+        url = f"{self.url}/v2/readings"
+        bad = dict(make_reading(), temperature_c=float("nan"))
+        self.assertEqual(post_raw(url, build_record(session, 1, json.dumps(bad).encode()))[0], 400)
         self.assertEqual(self.state.readings, [])
 
 

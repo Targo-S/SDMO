@@ -7,7 +7,7 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
@@ -18,6 +18,13 @@ from sdmo.metrics import register_crypto_metrics, send_metrics
 
 MODE_VALUES = {"legacy": 0, "hybrid": 1}
 
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_opener = build_opener(NoRedirect)
 
 class GatewayError(Exception):
     pass
@@ -61,7 +68,7 @@ class GatewayMetrics:
 
 
 def fetch_reading(device_url, device_master=None):
-    with urlopen(device_url, timeout=5) as response:
+    with _opener.open(device_url, timeout=5) as response:
         reading = json.load(response)
     if device_master is not None:
         reading = crypto.verify_reading(device_master, reading)
@@ -75,7 +82,7 @@ def forward_legacy(cloud_url, shared_key, reading):
         headers={"Content-Type": "application/json", "X-Legacy-Shared-Key": shared_key},
         method="POST",
     )
-    with urlopen(request, timeout=5) as response:
+    with _opener.open(request, timeout=5) as response:
         if response.status != 202:
             raise URLError(f"cloud returned HTTP {response.status}")
 
@@ -90,7 +97,7 @@ def _post_json(url, payload, timeout):
     request = Request(url, data=json.dumps(payload).encode(),
                       headers={"Content-Type": "application/json"}, method="POST")
     try:
-        with urlopen(request, timeout=timeout) as response:
+        with _opener.open(request, timeout=timeout) as response:
             return response.status, json.load(response)
     except HTTPError as error:
         try:
