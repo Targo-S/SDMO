@@ -2,7 +2,6 @@ name: AI Code Review
 
 on:
   pull_request:
-    branches: ["main"]
     types: [opened, synchronize]
 
 permissions:
@@ -11,11 +10,10 @@ permissions:
 
 jobs:
   review:
-    if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Review pull request
         uses: villesau/ai-codereviewer@a9a064dfa1db8c83f40ef63f6e247fa09c935ed6
@@ -23,4 +21,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_API_MODEL: "gpt-4"
-          exclude: "**/*.json, **/*.md"
+          exclude: "**/*.json,**/*.md"
