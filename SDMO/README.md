@@ -81,3 +81,9 @@ Run the services without Compose by setting the environment variables shown in [
 - CI tests and builds an image but does not publish, scan, release, or deploy it. Dependencies are pinned in `requirements.txt` without hashes.
 
 Do not use this starter with real devices or production data.
+
+## Software Bill of Materials
+
+[`../bom.cdx.json`](../bom.cdx.json) is a CycloneDX 1.6 snapshot of the resolved Python packages in the project environment, including transitive packages and the installed test dependency. It describes the Python environment used to create the snapshot; it is not a lockfile.
+
+The SBOM does not inventory operating-system packages in the `python:3.14-slim` base image or the optional `prom/prometheus:v2.55.1` image. Those images must be scanned separately to produce a complete deployment-image SBOM.
