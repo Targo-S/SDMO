@@ -23,7 +23,7 @@ py -m unittest discover -s tests -v
 - Cloud readings are in memory and lost on restart; gateway polling has no durable queue or retry backoff.
 - Gateway/cloud authentication uses a long-lived, static shared key over plain HTTP. The Compose default is demo-only and not suitable for production.
 - Monitoring is limited to health endpoints and a few counters: no collector, dashboards, alerts, tracing, or centralized logs.
-- CI tests and builds an image; a separate workflow publishes it to GHCR and a test deployment runs health checks (see Test Deployment). There is no scanning or production deploy. Test coverage is deliberately narrow.
+- CI tests and builds an image; separate workflows publish it to GHCR, deploy it to a test environment, and add AI-generated review comments on pull requests. There is no automated vulnerability/dependency scanning or production deploy. Test coverage is deliberately narrow.
 - The ML-KEM document is a proposal only; no cryptography is implemented. See [docs/ml-kem-migration.md](docs/ml-kem-migration.md).
 
 Set `SHARED_KEY` before starting Compose to replace the demo value. Do not use this starter with real devices or production data.
@@ -36,6 +36,10 @@ Set `SHARED_KEY` before starting Compose to replace the demo value. Do not use t
 - **Manual trigger:** Actions > Deploy Test > Run workflow, optionally with an `image_tag` (default `main`; version tags like `0.1.0` also work).
 - **Config:** uses the `test` GitHub environment (optionally add protection rules) and the optional secret `SDMO_SHARED_KEY` (defaults to the demo key). `GITHUB_TOKEN` is used to pull the image.
 - **Locally:** `SDMO_IMAGE=ghcr.io/<owner>/<repo>:main docker compose -f compose.yaml -f compose.test.yaml up -d --wait && ./scripts/check_health.sh`
+
+## AI Code Review
+
+`.github/workflows/ai-code-review.yml` uses [AI Code Reviewer](https://github.com/villesau/ai-codereviewer) to comment on pull requests targeting `main` when they are opened or updated. Add an `OPENAI_API_KEY` repository secret under Settings > Secrets and variables > Actions. The workflow gives the action a read-only contents token and permission to write pull-request comments; fork pull requests are skipped because GitHub does not provide repository secrets to them. The action sends pull-request code diffs to OpenAI for review.
 # SDMO Device-to-Cloud Starter
 
 Three small Python services: a simulated legacy sensor, an edge gateway that polls and forwards readings, and a cloud HTTP service with in-memory storage. The gateway and cloud establish sessions with a hybrid X25519 + ML-KEM-768 handshake; see [docs/ml-kem-infrastructure-plan.md](docs/ml-kem-infrastructure-plan.md).
@@ -78,7 +82,7 @@ Run the services without Compose by setting the environment variables shown in [
 - The legacy static-key path (`SHARED_KEY`, `/v1/readings`) is still in the code for the migration phases; removing it is the last step once `cloud_legacy_requests_total` stays at zero.
 - The device MAC does not reject replayed sequence numbers, because the simulated device restarts its counter at 1.
 - Monitoring is Prometheus text endpoints plus an optional single Prometheus container: no dashboards, Alertmanager, tracing, or centralized logs.
-- CI tests and builds an image but does not publish, scan, release, or deploy it. Dependencies are pinned in `requirements.txt` without hashes.
+- CI tests and builds an image; separate workflows publish it to GHCR, deploy it to a test environment, and add AI-generated review comments on pull requests. There is no automated vulnerability/dependency scanning or production deploy. Dependencies are pinned in `requirements.txt` without hashes.
 
 Do not use this starter with real devices or production data.
 
